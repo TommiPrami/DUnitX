@@ -1214,7 +1214,21 @@ end;
 
 function ConvStr2Ord(const ASource: TValue; ATarget: PTypeInfo; out AResult: TValue): Boolean;
 begin
-  AResult := TValue.FromOrdinal(ATarget, StrToInt64Def(ASource.AsString, 0));
+  if ATarget = System.TypeInfo(UInt64) then
+    AResult := TValue.FromOrdinal(ATarget, StrToUInt64Def(ASource.AsString, 0))
+  else
+    AResult := TValue.FromOrdinal(ATarget, StrToInt64Def(ASource.AsString, 0));
+  Result := True;
+end;
+
+function ConvStr2Set(const ASource: TValue; ATarget: PTypeInfo; out AResult: TValue): Boolean;
+var
+  pInt: PInteger;
+begin
+  AResult := TValue.From(0, ATarget);
+  pInt  := AResult.GetReferenceToRawData;
+  pInt^ := StringToSet(ATarget, Asource.AsString);
+
   Result := True;
 end;
 
@@ -1426,7 +1440,7 @@ const
       // tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat, tkString,
       ConvFail, ConvStr2Int, ConvFail, ConvStr2Enum, ConvStr2Float, ConvFail,
       // tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString
-      ConvFail, ConvFail, ConvFail, ConvFail, ConvFail, ConvFail,
+      ConvStr2Set, ConvFail, ConvFail, ConvFail, ConvFail, ConvFail,
       // tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
       ConvFail, ConvFail, ConvFail, ConvFail, ConvStr2Ord, {$IFDEF DELPHI_XE3_UP}ConvStr2DynArray{$ELSE}ConvFail{$ENDIF},
       // tkUString, tkClassRef, tkPointer, tkProcedure, tkMRecord

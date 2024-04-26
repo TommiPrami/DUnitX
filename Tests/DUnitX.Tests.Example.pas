@@ -39,6 +39,9 @@ uses
   {$ENDIF}
 
 type
+  TTestEnum = (teOne, teTwo, teThree);
+  TTestEnums = set of TTestEnum;
+
   {$M+}
   [TestFixture('ExampleFixture1')]
   [Category('examples')]
@@ -62,6 +65,9 @@ type
     [TestCase('Case 3','5,6')]
     procedure TestOne(param1 : integer; param2 : integer);
 
+    [TestCase('UInt64 18446744073709551615', '18446744073709551615')]
+    procedure TestUint64Argument(Value: UInt64);
+
     [TestCase('Case 3','Blah,1')]
     procedure AnotherTestMethod(const a : string; const b : integer);
 
@@ -81,6 +87,17 @@ type
     [TestCase('time with ms', '17:44:23.456')]
     [TestCase('time without ms', '17:44:23')]
     procedure TestTimeArgument(time: TTime);
+
+    [Test]
+    [TestCase('Set []', '[]|0', '|')]
+    [TestCase('Set [teOne]', '[teOne]|1', '|')]
+    [TestCase('Set [teTwo]', '[teTwo]|2', '|')]
+    [TestCase('Set [teThree]', '[teThree]|4', '|')]
+    [TestCase('Set [teOne,teTwo]', '[teOne,teTwo]|3', '|')]
+    [TestCase('Set [teOne,teThree]', '[teOne,teThree]|5', '|')]
+    [TestCase('Set [teOne,teTwo,teThree]', '[teOne,teTwo,teThree]|7', '|')]
+    [TestCase('Set [teThree,teTwo,teOne]', '[teThree,teTwo,teOne]|7', '|')]
+    procedure TestSetArgument(aset: TTestEnums; ExpectedAsInteger: UInt8);
 
     [Test]
     [Category('Bar,foo')]
@@ -284,6 +301,12 @@ begin
   Assert.Pass;
 end;
 
+procedure TMyExampleTests.TestSetArgument(aset: TTestEnums;
+  ExpectedAsInteger: UInt8);
+begin
+  Assert.AreEqual(ExpectedAsInteger, UInt8(aset));
+end;
+
 procedure TMyExampleTests.TestTimeArgument(time: TTime);
 var
   expected: TTime;
@@ -315,6 +338,11 @@ begin
   TDUnitX.CurrentRunner.Status('hello world');
   Assert.IsTrue(x is TObject); /// a bit pointless since it's strongly typed.
   x.Free;
+end;
+
+procedure TMyExampleTests.TestUint64Argument(Value: UInt64);
+begin
+  Assert.AreEqual(18446744073709551615, Value);
 end;
 
 destructor TExampleFixture2.Destroy;
