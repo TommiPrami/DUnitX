@@ -24,58 +24,66 @@
 {                                                                           }
 {***************************************************************************}
 
-unit DUnitX.Banner;
+unit DUnitX.FixtureBuilder;
 
 interface
 
-{$I DUnitX.inc}
+uses
+  DUnitX.Extensibility;
 
-procedure ShowBanner;
+type
+  TDUnitXFixtureBuilder = class(TInterfacedObject, IFixtureBuilder, IFixtureProviderContext)
+  private
+    FUseRtti : boolean;
+    FFixtureList : ITestFixtureList;
+  protected
+    function GetUseRtti : boolean;
+    function CreateFixture(const AFixtureClass : TClass; const AName : string; const ACategory : string) : ITestFixture;overload;
+    function BuildFixtureList : ITestFixtureList;
+
+  public
+    constructor Create(useRtti : boolean);
+  end;
 
 implementation
 
 uses
-  {$IFDEF USE_NS}
-  System.DateUtils,
-  System.SysUtils,
-  {$ELSE}
-  DateUtils,
-  SysUtils,
-  {$ENDIF}
-  DUnitX.ConsoleWriter.Base,
-  DUnitX.ServiceLocator;
+  DUnitX.Exceptions,
+  DUnitX.ServiceLocator,
+  DUnitX.TestFixture,
+  DUnitX.ResStrs;
 
+{ TDUnitXFixtureBuilder }
 
-procedure ShowBanner;
+function TDUnitXFixtureBuilder.BuildFixtureList: ITestFixtureList;
 var
-  consoleWriter : IDUnitXConsoleWriter;
-  yr : integer;
-
-  procedure WriteLine(const value : string);
-  begin
-    if consoleWriter <> nil then
-      consoleWriter.WriteLn(value)
-    else
-      System.Writeln(value);
-  end;
-
-
+  provider : IFixtureProvider;
 begin
-  consoleWriter := TDUnitXServiceLocator.DefaultContainer.Resolve<IDUnitXConsoleWriter>();
-  if consoleWriter <> nil then
-    consoleWriter.SetColour(ccBrightWhite, ccDefault);
+  result := FFixtureList;
 
-  yr := YearOf(Today);
+  provider := TDUnitXServiceLocator.DefaultContainer.Resolve<IFixtureProvider>();
+  if provider = nil then
+    raise ETestFrameworkException.Create(SNoFixtureProvider);
 
+  provider.Execute(Self);
 
-  WriteLine('**********************************************************************');
-  WriteLine(Format('*        DUnitX - (c) 2015-%d Vincent Parrett & Contributors       *', [yr]));
-  WriteLine('*                                                                    *');
-  WriteLine('*        License - http://www.apache.org/licenses/LICENSE-2.0        *');
-  WriteLine('**********************************************************************');
-  WriteLine('');
-  if consoleWriter <> nil then
-    consoleWriter.SetColour(ccDefault);
 end;
 
+constructor TDUnitXFixtureBuilder.Create(useRtti: boolean);
+begin
+  FUseRtti := useRtti;
+  FFixtureList := TTestFixtureList.Create;
+end;
+
+
+function TDUnitXFixtureBuilder.CreateFixture(const AFixtureClass: TClass; const AName, ACategory: string): ITestFixture;
+begin
+  result := TDUnitXTestFixture.Create(AName, ACategory, AFixtureClass, AFixtureClass.UnitName);
+  FFixtureList.Add(Result);
+end;
+
+function TDUnitXFixtureBuilder.GetUseRtti: boolean;
+begin
+  result := FUseRtti;
+end;
 end.

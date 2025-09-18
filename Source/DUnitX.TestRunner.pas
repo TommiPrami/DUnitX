@@ -108,7 +108,7 @@ type
     function Execute: IRunResults;
 
     procedure ExecuteFixtures(const parentFixtureResult: IFixtureResult; const context: ITestExecuteContext; const threadId: TThreadID; const fixtures: ITestFixtureList);
-    procedure ExecuteSetupFixtureMethod(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const fixtureResult: IFixtureResult);
+    function ExecuteSetupFixtureMethod(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const fixtureResult: IFixtureResult) : boolean;
     function  ExecuteTestSetupMethod(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const test: ITest; out errorResult: ITestResult; const memoryAllocationProvider: IMemoryLeakMonitor): boolean;
 
     procedure ExecuteTests(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const fixtureResult: IFixtureResult);
@@ -150,9 +150,6 @@ type
 
     procedure AddStatus(const threadId; const msg: string);
 
-    function DoCreateFixture(const AInstance: TObject; const AFixtureClass: TClass; const AName: string; const ACategory: string): ITestFixture; virtual;
-    function CreateFixture(const AInstance: TObject; const AFixtureClass: TClass; const AName: string; const ACategory: string): ITestFixture;
-
     function ShouldRunThisTest(const test: ITest): boolean;
 
     class constructor Create;
@@ -176,7 +173,7 @@ uses
   {$ELSE}
   TypInfo,
   StrUtils,
-  Types,  
+  Types,
   {$ENDIF}
   DUnitX.Attributes,
   DUnitX.CommandLine.Options,
@@ -185,9 +182,9 @@ uses
   DUnitX.TestResult,
   DUnitX.FixtureResult,
   DUnitX.Utils,
-  DUnitX.IoC,
-  DUnitX.Extensibility.PluginManager,
-  DUnitX.ResStrs;
+  DUnitX.ServiceLocator,
+  DUnitX.ResStrs,
+  DUnitX.FixtureBuilder;
 
 { TDUnitXTestRunner }
 
@@ -260,20 +257,11 @@ end;
 
 function TDUnitXTestRunner.BuildFixtures  : IInterface;
 var
-  pluginManager : IPluginManager;
+  fixtureBuilder : IFixtureBuilder;
 begin
-  result := FFixtureList;
-  if FFixtureList <> nil then
-    exit;
+  fixtureBuilder := TDUnitXFixtureBuilder.Create(FUseRTTI);
 
-  FFixtureList := TTestFixtureList.Create;
-
-
-  pluginManager := TPluginManager.Create(Self.CreateFixture,FUseRTTI);
-  pluginManager.Init;//loads the plugin features.
-
-  //generate the fixtures. The plugin Manager calls back into CreateFixture
-  pluginManager.CreateFixtures;
+  FFixtureList := fixtureBuilder.BuildFixtureList;
   FFixtureList.Sort;
 
   result := FFixtureList;
@@ -363,20 +351,6 @@ begin
   Create;
 
   FLoggers.AddRange(AListeners);
-end;
-
-function TDUnitXTestRunner.DoCreateFixture(const AInstance : TObject;const AFixtureClass: TClass; const AName: string; const ACategory : string): ITestFixture;
-begin
-  if AInstance <> nil then
-    result := TDUnitXTestFixture.Create(AName,ACategory, AInstance,AInstance.ClassType.UnitName)
-  else
-    result := TDUnitXTestFixture.Create(AName, ACategory, AFixtureClass,AFixtureClass.UnitName);
-end;
-
-function TDUnitXTestRunner.CreateFixture(const AInstance : TObject;const AFixtureClass: TClass; const AName: string; const ACategory : string): ITestFixture;
-begin
-  Result := DoCreateFixture(AInstance, AFixtureClass, AName, ACategory);
-  FFixtureList.Add(Result);
 end;
 
 
@@ -666,6 +640,7 @@ procedure TDUnitXTestRunner.ExecuteFixtures(const parentFixtureResult : IFixture
 var
   fixture: ITestFixture;
   fixtureResult : IFixtureResult;
+  setupOk : boolean;
 begin
   for fixture in fixtures do
   begin
@@ -675,6 +650,7 @@ begin
     if (not fixture.HasTests) and (not fixture.HasChildTests) then
       System.Continue;
 
+    setupOk := True;
     fixtureResult := TDUnitXFixtureResult.Create(parentFixtureResult, fixture as ITestFixtureInfo);
     if parentFixtureResult = nil then
       context.RecordFixture(fixtureResult);
@@ -686,15 +662,17 @@ begin
         fixture.InitFixtureInstance;
       //only run the setup method if there are actually tests
       if fixture.HasActiveTests and Assigned(fixture.SetupFixtureMethod) then
-        ExecuteSetupFixtureMethod(context, threadId, fixture, fixtureResult);
+        //returns false if an exception happens in the setup.
+        setupOk := ExecuteSetupFixtureMethod(context, threadId, fixture, fixtureResult);
 
-      if fixture.HasTests then
+      if setupOk and fixture.HasTests then
         ExecuteTests(context, threadId, fixture, fixtureResult);
 
       if fixture.HasChildFixtures then
         ExecuteFixtures(fixtureResult, context, threadId, fixture.Children);
 
-      if fixture.HasActiveTests and Assigned(fixture.TearDownFixtureMethod) then
+      // teardown will not run if the fixture setup errored.
+      if setupOk and fixture.HasActiveTests and Assigned(fixture.TearDownFixtureMethod) then
         //TODO: Tricker yet each test above us requires errors that occur here
         ExecuteTearDownFixtureMethod(context, threadId, fixture, fixtureResult);
 
@@ -711,19 +689,22 @@ begin
   result := TDUnitXTestResult.Create(test as ITestInfo, TTestResultType.Ignored, ignoreReason);
 end;
 
-procedure TDUnitXTestRunner.ExecuteSetupFixtureMethod(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const fixtureResult: IFixtureResult);
+function TDUnitXTestRunner.ExecuteSetupFixtureMethod(const context: ITestExecuteContext; const threadId: TThreadID; const fixture: ITestFixture; const fixtureResult: IFixtureResult) : boolean;
 begin
   try
     Self.Loggers_SetupFixture(threadid, fixture as ITestFixtureInfo);
     fixture.SetupFixtureMethod;
     Self.Loggers_EndSetupFixture(threadid, fixture as ITestFixtureInfo);
+    result := true;
   except
     on e: Exception do
     begin
+      result := false;
       // Log error into each test
       InvalidateTestsInFixture(fixture, context, threadId, e, fixtureResult);
       Log(TLogLevel.Error, Format(SFixtureSetupError, [fixture.Name, e.Message]));
       Log(TLogLevel.Error, SSkippingFixture);
+
     end;
   end;
 end;
@@ -812,7 +793,7 @@ begin
     if not ShouldRunThisTest(test) then
       System.Continue;
 
-    memoryAllocationProvider := TDUnitXIoC.DefaultContainer.Resolve<IMemoryLeakMonitor>();
+    memoryAllocationProvider := TDUnitXServiceLocator.DefaultContainer.Resolve<IMemoryLeakMonitor>();
 
     //Start a fresh for this test. If we had an exception last execute of the
     //setup or tear down that may have changed this execution. Therefore we try

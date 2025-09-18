@@ -1,9 +1,16 @@
-program DUnitXExamples_D10Rio;
+program DUnitXExamples_D13;
 
+{$IFNDEF TESTINSIGHT}
 {$APPTYPE CONSOLE}
+{$ENDIF}
+{$STRONGLINKTYPES ON}
 
 uses
   System.SysUtils,
+  {$IFDEF TESTINSIGHT}
+  TestInsight.DUnitX,
+  {$ENDIF}
+  System.Diagnostics,
   DUnitX.Examples.General in 'DUnitX.Examples.General.pas',
   DUnitX.ConsoleWriter.Base in '..\Source\DUnitX.ConsoleWriter.Base.pas',
   DUnitX.DUnitCompatibility in '..\Source\DUnitX.DUnitCompatibility.pas',
@@ -39,37 +46,74 @@ uses
   DUnitX.Timeout in '..\Source\DUnitX.Timeout.pas',
   DUnitX.Attributes in '..\Source\DUnitX.Attributes.pas',
   DUnitX.Linux.Console in '..\Source\DUnitX.Linux.Console.pas',
-  ProviderExample in 'ProviderExample.pas';
+  ProviderExample in 'ProviderExample.pas',
+  DUnitX.FixtureBuilder in '..\Source\DUnitX.FixtureBuilder.pas',
+  DUnitX.FilterBuilder in '..\Source\DUnitX.FilterBuilder.pas',
+  DUnitX.Filters in '..\Source\DUnitX.Filters.pas',
+  DUnitX.Loggers.XML.JUnit in '..\Source\DUnitX.Loggers.XML.JUnit.pas',
+  DUnitX.OptionsDefinition in '..\Source\DUnitX.OptionsDefinition.pas';
 
+  { keep comment here to protect the following conditional from being removed by the IDE when adding a unit }
+{$IFNDEF TESTINSIGHT}
 var
   runner : ITestRunner;
   results : IRunResults;
   logger : ITestLogger;
+  stopWatch : TStopWatch;
+  {$IFDEF CI}
   nunitLogger : ITestLogger;
+  {$ENDIF}
+{$ENDIF}
 begin
+  {$IFDEF TESTINSIGHT}
+  TestInsight.DUnitX.RunRegisteredTests;
+  {$ELSE}
+
   try
+    //Check command line options, will exit if invalid
+    TDUnitX.CheckCommandLine;
     //Create the runner
     runner := TDUnitX.CreateRunner;
+    //Tell the runner to use RTTI to find Fixtures
     runner.UseRTTI := True;
-
+    //When true, Assertions must be made during tests;
+    runner.FailsOnNoAsserts := False;
+    {$IFNDEF CI}
+    TDUnitX.Options.ExitBehavior := TDUnitXExitBehavior.Pause;
+    {$ELSE}
+    //no point logging to the console, CI server will use the xml results and exit code.
+    TDUnitX.Options.ConsoleMode := TDunitXConsoleMode.Off;
+    {$ENDIF}
     //tell the runner how we will log things
-
+    //Log to the console window if desired
     if TDUnitX.Options.ConsoleMode <> TDunitXConsoleMode.Off then
     begin
       logger := TDUnitXConsoleLogger.Create(TDUnitX.Options.ConsoleMode = TDunitXConsoleMode.Quiet);
       runner.AddLogger(logger);
     end;
 
+    {$IFDEF CI}
     nunitLogger := TDUnitXXMLNUnitFileLogger.Create(TDUnitX.Options.XMLOutputFile);
     runner.AddLogger(nunitLogger);
+    {$ENDIF}
 
     //Run tests
+    stopWatch := TStopWatch.StartNew;
     results := runner.Execute;
+    stopWatch.Stop;
 
-    System.Write('Done.. press <Enter> key to quit.');
-    System.Readln;
+    {$IFNDEF CI}
+    if TDUnitX.Options.ConsoleMode <> TDunitXConsoleMode.Off then
+      System.Write(Format('Done in %d ms.. press <Enter> key to quit.', [stopWatch.ElapsedMilliseconds]));
+
+    //We don't want this happening when running under CI.
+    if TDUnitX.Options.ExitBehavior = TDUnitXExitBehavior.Pause then
+      System.Readln;
+    {$ENDIF}
+
   except
     on E: Exception do
       System.Writeln(E.ClassName, ': ', E.Message);
   end;
+  {$ENDIF}
 end.

@@ -89,6 +89,7 @@ type
   CustomTestCaseAttribute = DUnitX.Attributes.CustomTestCaseAttribute;
   CustomTestCaseSourceAttribute = DUnitX.Attributes.CustomTestCaseSourceAttribute;
   TestCaseAttribute = DUnitX.Attributes.TestCaseAttribute;
+  AutoNameTestCaseAttribute = DUnitX.Attributes.AutoNameTestCaseAttribute;
   TestCaseProviderAttribute = DUnitX.Attributes.TestCaseProviderAttribute;
 
   TExceptionInheritance = DUnitX.Types.TExceptionInheritance;
@@ -578,13 +579,11 @@ type
     class destructor Destroy;
   public class var
     RegisteredFixtures : TDictionary<TClass,string>;
-    RegisteredPlugins  : TList<IPlugin>;
   public
     class function CreateRunner : ITestRunner;overload;
     class function CreateRunner(const ALogger : ITestLogger) : ITestRunner;overload;
     class function CreateRunner(const ALoggers : array of ITestLogger) : ITestRunner;overload;
     class procedure RegisterTestFixture(const AClass : TClass; const AName : string = '' );
-    class procedure RegisterPlugin(const plugin : IPlugin);
     class function CurrentRunner : ITestRunner;
     class function GetAssertCount(const AThreadId: TThreadID) : Cardinal;
     ///  Parses the command line options and applies them the the Options object.
@@ -596,7 +595,7 @@ type
     class property Filter : ITestFilter read FFilter write FFilter;
   end;
 
-  // Register an implementation via TDUnitXIoC.DefaultContainer
+  // Register an implementation via TDUnitXServiceLocator.DefaultContainer
   IStacktraceProvider = interface
   ['{382288B7-932C-4B6E-8417-660FFCA849EB}']
     function GetStackTrace(const ex: Exception; const exAddressAddress: Pointer) : string;
@@ -652,9 +651,9 @@ uses
   DUnitX.CommandLine.Options,
   DUnitX.TestRunner,
   DUnitX.Utils,
-  DUnitX.IoC,
+  DUnitX.ServiceLocator,
   DUnitX.MemoryLeakMonitor.Default,
-  DUnitX.FixtureProviderPlugin,
+  DUnitX.FixtureProvider,
   DUnitX.FilterBuilder,
   DUnitX.WeakReference,
   DUnitX.TestDataProvider;
@@ -734,7 +733,7 @@ begin
       if not FOptions.HideBanner then
         DUnitX.Banner.ShowBanner;
 
-      consoleWriter := TDUnitXIoC.DefaultContainer.Resolve<IDUnitXConsoleWriter>;
+      consoleWriter := TDUnitXServiceLocator.DefaultContainer.Resolve<IDUnitXConsoleWriter>;
       if consoleWriter <> nil then
         consoleWriter.SetColour(ccBrightRed,ccDefault);
       Writeline(consoleWriter, parseResult.ErrorText);
@@ -763,7 +762,7 @@ begin
       //if /? or -h then just show usage and exit
       if FOptions.ShowUsage then
       begin
-        consoleWriter := TDUnitXIoC.DefaultContainer.Resolve<IDUnitXConsoleWriter>;
+        consoleWriter := TDUnitXServiceLocator.DefaultContainer.Resolve<IDUnitXConsoleWriter>;
         ShowUsage(consoleWriter);
         Halt(EXIT_OK);
       end;
@@ -778,9 +777,8 @@ begin
   FAssertCounters := TDictionary<TThreadID,Cardinal>.Create(8);
   FLock := TCriticalSection.Create;
   RegisteredFixtures := TDictionary<TClass,string>.Create;
-  RegisteredPlugins  := TList<IPlugin>.Create;
   //Make sure we have at least a dummy memory leak monitor registered.
-  if not TDUnitXIoC.DefaultContainer.HasService<IMemoryLeakMonitor> then
+  if not TDUnitXServiceLocator.DefaultContainer.HasService<IMemoryLeakMonitor> then
     DUnitX.MemoryLeakMonitor.Default.RegisterDefaultProvider;
   FFilter := nil;
   Assert.OnAssert := procedure
@@ -817,7 +815,6 @@ end;
 class destructor TDUnitX.Destroy;
 begin
   RegisteredFixtures.Free;
-  RegisteredPlugins.Free;
   FOptions.Free;
   FAssertCounters.Free;
   FLock.Free;
@@ -832,14 +829,6 @@ begin
   finally
     FLock.Leave;
   end;
-end;
-
-
-class procedure TDUnitX.RegisterPlugin(const plugin: IPlugin);
-begin
-  if plugin = nil then
-    raise Exception.Create(SNilPlugin);
-  RegisteredPlugins.Add(plugin);
 end;
 
 class procedure TDUnitX.RegisterTestFixture(const AClass: TClass; const AName : string);
@@ -924,8 +913,8 @@ end;
 {$IFNDEF DELPHI_XE3}
 
 initialization
-  TDUnitX.RegisterPlugin(TDUnitXFixtureProviderPlugin.Create);
   InitAssert;
+  TDUnitXServiceLocator.DefaultContainer.RegisterType<IFixtureProvider,TDUnitXFixtureProvider>();
 
 finalization
 

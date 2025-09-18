@@ -24,7 +24,7 @@
 {                                                                           }
 {***************************************************************************}
 
-unit DUnitX.FixtureProviderPlugin;
+unit DUnitX.FixtureProvider;
 
 interface
 
@@ -43,12 +43,6 @@ uses
   DUnitX.TestDataProvider;
 
 type
-  TDUnitXFixtureProviderPlugin = class(TInterfacedObject,IPlugin)
-  protected
-    procedure GetPluginFeatures(const context: IPluginLoadContext);
-  end;
-
-
   TDUnitXFixtureProvider = class(TInterfacedObject,IFixtureProvider)
   private class var
     FRttiContext : TRttiContext;
@@ -90,7 +84,8 @@ uses
   DUnitX.TestFramework,
   DUnitX.ResStrs,
   DUnitX.InternalInterfaces,
-  DUnitX.InternalDataProvider;
+  DUnitX.InternalDataProvider,
+  DUnitX.ServiceLocator;
 
 { TDUnitXFixtureProvider }
 
@@ -281,8 +276,9 @@ var
   testEnabled     : boolean;
   isTestMethod    : boolean;
   repeatAttrib    : RepeatTestAttribute;
+  {$IFDEF MSWINDOWS}
   maxTimeAttrib   : MaxTimeAttribute;
-
+  {$ENDIF}
   tstProviderAttribs : TArray<TestCaseProviderAttribute>;
   tstProviderAttrib: TestCaseProviderAttribute;
   iProvider: ITestDataProvider;
@@ -343,7 +339,9 @@ begin
     willRaiseAttrib := nil;
     isTestMethod := false;
     repeatCount := 1;
+    {$IFDEF MSWINDOWS}
     maxTimeAttrib := nil;
+    {$ENDIF}
     maxTime := 0;
     willRaise := nil;
     willRaiseInherit := exExact;
@@ -489,7 +487,11 @@ begin
           begin
             for i := 1 to repeatCount do
             begin
-              currentFixture.AddTestCase(method.Name, testCaseAttrib.CaseInfo.Name, FormatTestName(method.Name, i, repeatCount), category, method, testEnabled, testCaseAttrib.CaseInfo.Values);
+              if testCaseAttrib is AutoNameTestCaseAttribute then
+                caseName := '(' + AutoNameTestCaseAttribute(testCaseAttrib).ValuesText + ')'
+              else
+                caseName := testCaseAttrib.CaseInfo.Name;
+              currentFixture.AddTestCase(method.Name, caseName, FormatTestName(method.Name, i, repeatCount), category, method, testEnabled, testCaseAttrib.CaseInfo.Values);
             end;
           end;
           // Add test case from test \case sources
@@ -586,13 +588,6 @@ begin
       end;
     end;
   end;
-end;
-
-{ TDUnitXFixtureProviderPlugin }
-
-procedure TDUnitXFixtureProviderPlugin.GetPluginFeatures(const context: IPluginLoadContext);
-begin
-  context.RegisterFixtureProvider(TDUnitXFixtureProvider.Create);
 end;
 
 end.

@@ -11,3 +11,5 @@
 *.res binary
 *.dres binary
 *.ico binary
+
+VSoft.DUnitX.dspec filter=insert-hash

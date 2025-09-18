@@ -41,7 +41,7 @@ interface
 
 uses
   DUnitX.TestFramework,
-  DUnitX.FixtureProviderPlugin;
+  DUnitX.FixtureProvider;
 
 {$ENDIF}
 
@@ -59,8 +59,8 @@ begin
 end;
 
 initialization
-  TDUnitX.RegisterPlugin(TDUnitXFixtureProviderPlugin.Create);
   InitAssert;
+  TDUnitXServiceLocator.DefaultContainer.RegisterType<IFixtureProvider,TDUnitXFixtureProvider>();
 
 {$ENDIF}
 
