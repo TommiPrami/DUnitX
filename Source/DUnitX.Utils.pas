@@ -348,7 +348,7 @@ type
   end;
 {$IFEND}
 
-{$IF DELPHI_XE2_UP}
+{$IFDEF DELPHI_XE2_UP}
 
 {$REGION 'Documentation'}
   ///	<summary>
@@ -362,7 +362,7 @@ type
   public
     property ParameterCount : Integer read GetParameterCount;
   end;
-{$IFEND}
+{$ENDIF}
 
 {$REGION 'Documentation'}
   ///	<summary>
@@ -716,9 +716,9 @@ type
     class function Concat<T>(const Arrays : array of TArray<T>) : TArray<T>; static;
     class function Create<T>(const a : T; const b : T) : TArray<T>; static;
     class procedure Delete<T>(var source : TArray<T>; index, count : integer); static;
-{$IF DELPHI_2010}
+{$IFDEF DELPHI_2010}
     class function ToArray<T>(Enumerable : TEnumerable<T>; Count : Integer) : TArray<T>; static;
-{$IFEND}
+{$ENDIF}
   end;
 
 {$IFNDEF DELPHI_XE8_UP }
@@ -1819,7 +1819,7 @@ begin
   end;
 end;
 
-{$IF DELPHI_2010}
+{$IFDEF DELPHI_2010}
 class function TArrayHelper.ToArray<T>(Enumerable : TEnumerable<T>; Count : Integer) : TArray<T>;
 var
   LItem : T;
@@ -1832,7 +1832,7 @@ begin
     Inc(Count);
   end;
 end;
-{$IFEND}
+{$ENDIF}
 
 class function TArrayHelper.Create<T>(const a, b : T) : TArray<T>;
 begin
@@ -2100,12 +2100,12 @@ end;
 
 { TRttiInvokableTypeHelper }
 
-{$IF DELPHI_XE2_UP}
+{$IFDEF DELPHI_XE2_UP}
 function TRttiInvokableTypeHelper.GetParameterCount : Integer;
 begin
   Result := Length(GetParameters());
 end;
-{$IFEND}
+{$ENDIF}
 
 { TRttiMemberHelper }
 

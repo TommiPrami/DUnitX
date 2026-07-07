@@ -109,10 +109,10 @@ begin
   Ctx.ContextFlags := CONTEXT_FULL;
   GetThreadContext(ThreadHandle, Ctx);
 
-{$IFDEF CPUX64}
-  Ctx.Rip := Cardinal(@RaiseTimeOutException);
-{$ELSE}
+{$IFDEF CPUX86}
   Ctx.Eip := Cardinal(@RaiseTimeOutException);
+{$ELSE}
+  Ctx.Rip := Cardinal(@RaiseTimeOutException);
 {$ENDIF}
   SetThreadContext(ThreadHandle, Ctx);
   ResumeThread(ThreadHandle);
