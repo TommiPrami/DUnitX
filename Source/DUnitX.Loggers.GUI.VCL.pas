@@ -182,6 +182,7 @@ type
     procedure edtFilterKeyPress(Sender : TObject; var Key : Char);
     procedure FormCreate(Sender : TObject);
     procedure FormKeyDown(Sender : TObject; var Key : Word; Shift : TShiftState);
+    procedure FormResize(Sender : TObject);
     procedure FormShow(Sender : TObject);
     procedure tvwTestsCreateNodeClass(Sender : TCustomTreeView; var NodeClass : TTreeNodeClass);
     procedure tvwTestsKeyPress(Sender : TObject; var Key : Char);
@@ -313,6 +314,14 @@ type
     function IterateChilds(const Proc : TGUIVCLTestRunner.TTreeViewIterateProc) : boolean;
     function IterateParents(const Proc : TGUIVCLTestRunner.TTreeViewIterateProc) : boolean;
   end;
+
+// Test names are used as .ini keys. Trailing spaces are trimmed when the file is
+// read, and '=' would end the key: write '=' as '~e', and '~' as '~~'
+function TestSetupKey(const TestName : string) : string;
+begin
+  Result := StringReplace(TrimRight(TestName), '~', '~~', [rfReplaceAll]);
+  Result := StringReplace(Result, '=', '~e', [rfReplaceAll]);
+end;
 
 procedure Run;
 begin
@@ -538,14 +547,16 @@ procedure TGUIVCLTestRunner.FormClose(Sender : TObject; var Action : TCloseActio
 var
   IniFile : TMemIniFile;
 begin
+  // Reads an existing ANSI or UTF-8 file (detected by its BOM) and saves as UTF-8
   IniFile := TMemIniFile.Create(ChangeFileExt(ParamStr(0), '.ini'));
+  IniFile.Encoding := TEncoding.UTF8;
   try
     IterateTestNodes(
       procedure(const Node : TTreeNode; var Stop : boolean)
       begin
         if TTestNode(Node).IsFixtureNode then
           Exit;
-        IniFile.WriteBool(cTestSetup, Node.Text, Node.StateIndex = cTestNodeStateChecked);
+        IniFile.WriteBool(cTestSetup, TestSetupKey(Node.Text), Node.StateIndex = cTestNodeStateChecked);
       end);
     IniFile.UpdateFile;
   finally
@@ -555,9 +566,6 @@ end;
 
 procedure TGUIVCLTestRunner.FormCreate(Sender : TObject);
 begin
-  Width := Screen.WorkAreaWidth;
-  Height := Screen.WorkAreaHeight;
-
   FTestBookmarkList := TTestBookmarkList.Create;
   FTestNodes := TDictionary<string, TTreeNode>.Create;
 
@@ -695,7 +703,7 @@ var
   LogMessageNode : TTreeNode;
   ParentNode : TTreeNode;
 begin
-  if Test.ResultType = TTestResultType.Pass then
+  if (Test.ResultType = TTestResultType.Pass) and (Test.Message = '') then
     ParentNode := ResultNode
   else
   begin
@@ -939,12 +947,12 @@ var
   Fixture : ITestFixture;
   Test : ITest;
   TestNode : TTreeNode;
-  IniFile : TIniFile;
+  IniFile : TMemIniFile;
   FixtureNode : TTreeNode;
   HasTests : boolean;
   HasChildTests : boolean;
 begin
-  IniFile := TIniFile.Create(ChangeFileExt(ParamStr(0), '.ini'));
+  IniFile := TMemIniFile.Create(ChangeFileExt(ParamStr(0), '.ini')); // ANSI or UTF-8, by BOM
   try
     for Fixture in FixtureList do
     begin
@@ -969,7 +977,7 @@ begin
           TestNode := tvwTests.Items.AddChild(FixtureNode, Test.FullName);
           FTestNodes.TryAdd(Test.FullName, TestNode);
           TestNode.StateIndex := cTestNodeStateUnchecked;
-          if IniFile.ReadBool(cTestSetup, Test.FullName, true) then
+          if IniFile.ReadBool(cTestSetup, TestSetupKey(Test.FullName), true) then
             TTestNode(TestNode).InvertState;
         end;
       end;
@@ -998,7 +1006,13 @@ end;
 
 procedure TGUIVCLTestRunner.edtFilterKeyPress(Sender : TObject; var Key : Char);
 begin
-  if Key = #13 then
+  if Key = #1 then // Ctrl+A
+  begin
+    // Without runtime themes the edit control ignores Ctrl+A
+    edtFilter.SelectAll;
+    Key := #0;
+  end
+  else if Key = #13 then // Enter
   begin
     LoadTests;
     Key := #0;
@@ -1009,6 +1023,16 @@ procedure TGUIVCLTestRunner.FormKeyDown(Sender : TObject; var Key : Word; Shift 
 begin
   if (Key = VK_F9) and (Shift = []) then
     actRun.Execute;
+end;
+
+procedure TGUIVCLTestRunner.FormResize(Sender : TObject);
+var
+  MaxResultsWidth : integer;
+begin
+  // Narrow pnlResults rather than squeeze pnlTests below the splitter's MinSize
+  MaxResultsWidth := pnlClient.ClientWidth - splMain.Width - splMain.MinSize;
+  if pnlResults.Width > MaxResultsWidth then
+    pnlResults.Width := Max(MaxResultsWidth, pnlResults.Constraints.MinWidth);
 end;
 
 procedure TGUIVCLTestRunner.FormShow(Sender : TObject);
@@ -1117,7 +1141,7 @@ end;
 
 procedure TGUIVCLTestRunner.tvwTestsKeyPress(Sender : TObject; var Key : Char);
 begin
-  if Key = ' ' then
+  if (Key = ' ') and (tvwTests.Selected <> nil) then
   begin
     TTestNode(tvwTests.Selected).InvertState;
     Key := #0;

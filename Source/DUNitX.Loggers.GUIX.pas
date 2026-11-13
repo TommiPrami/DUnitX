@@ -78,7 +78,6 @@ type
     Label6 : TLabel;
     FailTestMessage : TMemo;
     Label8 : TLabel;
-    SelectFailedButton : TButton;
     procedure FormCreate(Sender : TObject);
     procedure FormShow(Sender : TObject);
     procedure RunExecute(Sender : TObject);
@@ -86,7 +85,6 @@ type
     procedure FailListItemClick(const Sender : TObject;
       const AItem : TListViewItem);
     procedure TestTreeChangeCheck(Sender : TObject);
-    procedure SelectFailedButtonClick(Sender : TObject);
     procedure FormClose(Sender : TObject; var Action : TCloseAction);
   private
     { Private declarations }
@@ -141,6 +139,8 @@ type
     FImage : TImage;
     FTest : ITest;
     FResultType : TTestResultType;
+  protected
+    procedure ApplyStyle; override;
   public
     constructor Create(Owner : TComponent; Test : ITest; Text : string; TestFullName : string); reintroduce;
     destructor Destroy; override;
@@ -239,26 +239,6 @@ begin
 
   for I := 0 to TestTree.Count - 1 do
     WriteValues(TestTree.Items[I]);
-end;
-
-procedure TGUIXTestRunner.SelectFailedButtonClick(Sender : TObject);
-
-  procedure SetChecked(Item : TTreeViewItem);
-  var
-    J : Integer;
-  begin
-    if Assigned(TTestNode(Item).Test) then
-      Item.IsChecked := (TTestNode(Item).ResultType = TTestResultType.Failure)
-        or (TTestNode(Item).ResultType = TTestResultType.Error)
-        or (TTestNode(Item).ResultType = TTestResultType.MemoryLeak);
-    for J := 0 to Item.Count - 1 do
-      SetChecked(Item.Items[J]);
-  end;
-var
-  I : Integer;
-begin
-  for I := 0 to TestTree.Count - 1 do
-    SetChecked(TestTree.Items[I]);
 end;
 
 function TGUIXTestRunner.CreateNode(Owner : TComponent; Test : ITest) : TTreeViewItem;
@@ -547,18 +527,25 @@ begin
   FFullName := TestFullName;
   FTest := Test;
   FImage := TImage.Create(Owner);
-  FImage.Parent := Self;
   FImage.Align := TAlignLayout.Right;
 
   FImage.Bitmap.Create(15, 15);
   FImage.Bitmap.Clear(TAlphaColorRec.Gray);
-  FImage.SendToBack;
 end;
 
 destructor TTestNode.Destroy;
 begin
   FImage.FreeOnRelease;
   inherited;
+end;
+
+procedure TTestNode.ApplyStyle;
+begin
+  inherited;
+  // Parent the image only once the item is styled: as a child before then,
+  // TControl.EndUpdate raises EArgumentOutOfRangeException in 10.3/10.4
+  FImage.Parent := Self;
+  FImage.SendToBack;
 end;
 
 procedure TTestNode.Reload;
